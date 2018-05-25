@@ -1,0 +1,354 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "pocEmail": {
+      "type": "string",
+      "metadata": {
+        "group": "basics",
+        "description": "The email contact to be used in tags for resoruces"
+      },
+      "defaultValue": "testemail@test1.com"
+    },
+    "location": {
+      "type": "string",
+      "metadata": {
+        "group": "Infrastructure settings",
+        "description": "The region to deploy the resources into. Only change if resources need to be deployed to a different location than the resource group."
+      },
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "adminUsername": {
+      "type": "string",
+      "metadata": {
+        "group": "Infrastructure settings",
+        "description": "The name of the administrator account of the new VMs and Domain"
+      }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "group": "Infrastructure settings",
+        "description": "The password for the administrator account of the new VMs and Domain"
+      }
+    },
+    "domainAdminUsername": {
+      "type": "string",
+      "metadata": {
+        "group": "Infrastructure settings",
+        "description": "The name of the administrator account of the new VMs and Domain"
+      }
+    },
+    "domainAdminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "group": "Infrastructure settings",
+        "description": "The password for the administrator account of the new VMs and Domain"
+      }
+    },
+    "storageAccountNamePrefix": {
+      "type": "string",
+      "metadata": {
+        "group": "Infrastructure settings",
+        "description": "The prefix of the new storage account created to store the VM disks. Different storage accounts will be created for AD, SQL, and SharePoint VMs."
+      }
+    },
+    "storageAccountType": {
+      "type": "string",
+      "metadata": {
+        "group": "Infrastructure settings",
+        "description": "The type of storage account"
+      },
+      "defaultValue": "Premium_LRS"
+    },
+    "virtualNetworkName": {
+      "type": "string",
+      "defaultValue": "spfarmhaVNET",
+      "metadata": {
+        "group": "Infrastructure settings",
+        "description": "Resource ID of the existing VNET. You can find the Resource ID for the VNET on the Properties blade of the VNET"
+      }
+    },
+    "_artifactsLocation": {
+      "type": "string",
+      "metadata": {
+        "group": "Infrastructure settings",
+        "description": "Change this value to your repo name if deploying from a fork"
+      },
+      "defaultValue": "https://raw.githubusercontent.com/manishkumar-agarwal/sharepoint-ha-existing-vnet-sqlao/master"
+    },
+    "_artifactsLocationSasToken": {
+      "type": "securestring",
+      "metadata": {
+        "group": "Infrastructure settings",
+        "description": "Auto-generated token to access _artifactsLocation",
+        "artifactsLocationSasToken": ""
+      },
+      "defaultValue": ""
+    },
+    "domainName": {
+      "type": "string",
+      "metadata": {
+        "group": "Active Directory settings",
+        "description": "The FQDN of the AD Domain created "
+      },
+      "defaultValue": "sphafarm.local"
+    },
+    "ouPath": {
+      "type": "string",
+      "metadata": {
+        "group": "Active Directory settings",
+        "description": "The OU Path for joining the machines to the domain specified"
+      },
+      "defaultValue": "CN=Computers,DC=wtw_test,DC=local"
+    },
+    "adPdcNicIPAddress": {
+      "type": "string",
+      "metadata": {
+        "group": "Active Directory settings",
+        "description": "The IP address of the new AD VM"
+      },
+      "defaultValue": "10.0.0.4"
+    },
+    "spWebSubnetName": {
+      "type": "string",
+      "metadata": {
+        "group": "SharePoint Server settings",
+        "description": "The address range of the SP Web subnet created in the new VNET"
+      },
+      "defaultValue": "10.0.2.0/24"
+    },
+    "spAppSubnetName": {
+      "type": "string",
+      "metadata": {
+        "group": "SharePoint Server settings",
+        "description": "The address range of the SP App subnet created in the new VNET"
+      },
+      "defaultValue": "10.0.3.0/24"
+    },
+    "spVMSize": {
+      "type": "string",
+      "metadata": {
+        "group": "SharePoint Server settings",
+        "description": "The size of the SP VMs Created"
+      },
+      "defaultValue": "Standard_DS2"
+    },
+    "spAGPrefix": {
+      "type": "string",
+      "metadata": {
+        "group": "SharePoint Server settings",
+        "description": "The name of the prefix for SP Farm Availability groups to be created"
+      },
+      "defaultValue": " "
+    },
+    "spVmImage": {
+      "type": "string",
+      "metadata": {
+        "group": "SharePoint Server settings",
+        "description": "The custom image of the sharepoint. This can be found in the properties of the Managed image"
+      },
+      "defaultValue": " "
+    },
+    "spAppVMName1": {
+      "type": "string",
+      "metadata": {
+        "group": "SharePoint Server settings",
+        "description": "The name of the first SP App VM to be Created"
+      },
+      "defaultValue": " "
+    },
+    "spWebVMName1": {
+      "type": "string",
+      "metadata": {
+        "group": "SharePoint Server settings",
+        "description": "The name of the first SP Web VM to be Created"
+      },
+      "defaultValue": " "
+    }
+  },
+  "variables": {
+    "availabilitySets": {
+      "spWebAvailabilitySetName": "[concat(parameters('spAGPrefix'),'-WEB')]",
+      "spAppAvailabilitySetName": "[concat(parameters('spAGPrefix'),'-APP')]"
+    },
+    "vmSettings": {
+      "spVMNames": {
+        "spWebVMNames": [
+          "[parameters('spWebVMName1')]"
+        ],
+        "spAppVMNames": [
+          "[parameters('spAppVMName1')]"
+        ]
+      },
+      "vmSetup": {
+        "spImagePublisher": "MicrosoftSharePoint",
+        "spImageOffer": "MicrosoftSharePointServer",
+        "spImageSKU": "2013",
+        "spDiskSize": 128,
+        "spVMSize": "[parameters('spVMSize')]",
+        "vmContainerName": "vhds",
+        "vmList": [
+          {
+            "vmName": "[parameters('spAppVMName1')]",
+            "vmAvailabilitySet": "[variables('ids').spAppAvailabilitySetName]"
+          },
+          {
+            "vmName": "[parameters('spWebVMName1')]",
+            "vmAvailabilitySet": "[variables('ids').spWebAvailabilitySetName]"
+          }
+        ],
+        "diagnosticStorageAccount": "[variables('spVMDiagnoticStorageAccount')]"
+      }
+    },
+    "availabilitySetsList": {
+      "name": [
+        "[variables('availabilitySets').spWebAvailabilitySetName]",
+        "[variables('availabilitySets').spAppAvailabilitySetName]"
+      ]
+    },
+    "generalParameters": {
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "LOB": "RSGNA",
+        "POC": "[parameters('pocEmail')]",
+        "Project": "OnePlace"
+      }
+    },
+    "storageAccountDetails": [
+      {
+        "name": "[variables('spVMDiagnoticStorageAccount')]",
+        "sku": "Standard_LRS"
+      }
+    ],
+    "spVMDiagnoticStorageAccount": "[concat(parameters('storageAccountNamePrefix'),1)]",
+    "spWebSubnetRef": "[concat(parameters('virtualNetworkName'),'/subnets/',parameters('spWebSubnetName'))]",
+    "spAppSubnetRef": "[concat(parameters('virtualNetworkName'),'/subnets/',parameters('spAppSubnetName'))]",
+    "ids": {
+      "spWebAvailabilitySetName": "[resourceId('Microsoft.Compute/availabilitySets',variables('availabilitySets').spWebAvailabilitySetName)]",
+      "spAppAvailabilitySetName": "[resourceId('Microsoft.Compute/availabilitySets',variables('availabilitySets').spAppAvailabilitySetName)]"
+    }
+  },
+  "resources": [
+    {
+      "name": "CreatingStorageAccounts",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(parameters('_artifactsLocation'),'/','nestedtemplates','/','creatingStorageAccounts.json', parameters('_artifactsLocationSasToken'))]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "generalParameters": {
+            "value": "[variables('generalParameters')]"
+          },
+          "storageAccountDetails": {
+            "value": "[variables('storageAccountDetails')]"
+          }
+        }
+      }
+    },
+    {
+      "name": "CreatingAvailabilitySets",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(parameters('_artifactsLocation'),'/','nestedtemplates','/','availabilitySets.json', parameters('_artifactsLocationSasToken'))]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "generalParameters": {
+            "value": "[variables('generalParameters')]"
+          },
+          "spAvailabilitySetNames": {
+            "value": "[variables('availabilitySetsList')]"
+          }
+        }
+      }
+    },
+    {
+      "name": "CreatingNetworkInterfaces",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "dependsOn": [ ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(parameters('_artifactsLocation'),'/','nestedtemplates','/','creatingNICS.json', parameters('_artifactsLocationSasToken'))]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "generalParameters": {
+            "value": "[variables('generalParameters')]"
+          },
+          "spwebVMNameList": {
+            "value": "[variables('vmSettings').spVMNames.spWebVMNames]"
+          },
+          "spWebSubnetRef": {
+            "value": "[variables('spWebSubnetRef')]"
+          },
+          "spappVMNameList": {
+            "value": "[variables('vmSettings').spVMNames.spAppVMNames]"
+          },
+          "spAppSubnetRef": {
+            "value": "[variables('spAppSubnetRef')]"
+          }
+        }
+      }
+    },
+    {
+      "name": "CreatingSharepointVirtualMachines",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "dependsOn": [
+        "Microsoft.Resources/deployments/CreatingStorageAccounts",
+        "Microsoft.Resources/deployments/CreatingNetworkInterfaces",
+        "Microsoft.Resources/deployments/CreatingAvailabilitySets"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(parameters('_artifactsLocation'),'/','nestedtemplates','/','provisioningSharepointVMs-fromimage.json', parameters('_artifactsLocationSasToken'))]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "generalParameters": {
+            "value": "[variables('generalParameters')]"
+          },
+          "vmSetup": {
+            "value": "[variables('vmSettings').vmSetup]"
+          },
+          "vmImage": {
+            "value": "[parameters('spVmImage')]"
+          },
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('adminPassword')]"
+          },
+          "domainAdminUsername": {
+            "value": "[parameters('domainAdminUsername')]"
+          },
+          "domainAdminPassword": {
+            "value": "[parameters('domainAdminPassword')]"
+          },
+          "ouPath": {
+            "value": "[parameters('ouPath')]"
+          },
+          "domainName": {
+            "value": "[parameters('domainName')]"
+          },
+          "DNSServer": {
+            "value": "[parameters('adPdcNicIPAddress')]"
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {}
+}

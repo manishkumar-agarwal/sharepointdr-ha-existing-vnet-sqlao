@@ -1,0 +1,170 @@
+﻿{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "generalParameters": {
+      "type": "object"
+    },
+    "vmSetup": {
+      "type": "object"
+    },
+    "vmImage": {
+      "type": "string"
+    },
+    "adminUsername": {
+      "type": "string"
+    },
+    "adminPassword": {
+      "type": "securestring"
+    },
+    "domainAdminUsername": {
+      "type": "string"
+    },
+    "domainAdminPassword": {
+      "type": "securestring"
+    },
+    "domainName": {
+      "type": "string"
+    },
+    "ouPath": {
+      "type": "string"
+    },
+    "DNSServer": {
+      "type": "string"
+    }
+  },
+  "variables": {
+    "addUsers": " manis549 manis549adm xiyua565 xiyua565adm 'RSG Server Admins'"
+  },
+  "resources": [
+    {
+      "apiVersion": "2017-03-30",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[parameters('vmSetup').vmList[copyIndex()].vmName]",
+      "location": "[parameters('generalParameters').location]",
+      "tags": "[parameters('generalParameters').tags]",
+      "copy": {
+        "name": "spVMLoop",
+        "count": "[length(parameters('vmSetup').vmList)]"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSetup').spVMSize]"
+        },
+        "availabilitySet": {
+          "id": "[parameters('vmSetup').vmList[copyIndex()].vmAvailabilitySet]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('vmSetup').vmList[copyIndex()].vmName]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "id": "[parameters('vmImage')]"
+          },
+          "osDisk": {
+            "osType": "Windows",
+            "name": "[concat(parameters('vmSetup').vmList[copyIndex()].vmName,'-osdisk')]",
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          },
+          "dataDisks": [
+            {
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              },
+              "name": "[concat(parameters('vmSetup').vmList[copyIndex()].vmName,'-data-disk1')]",
+              "caching": "ReadWrite",
+              "createOption": "FromImage",
+              "diskSizeGB": 500,
+              "lun": 0
+            },
+            {
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              },
+              "name": "[concat(parameters('vmSetup').vmList[copyIndex()].vmName,'-data-disk2')]",
+              "caching": "ReadWrite",
+              "createOption": "FromImage",
+              "diskSizeGB": 500,
+              "lun": 1
+            }
+          ]
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId(resourceGroup().name,'Microsoft.Network/networkInterfaces',concat(parameters('vmSetup').vmList[copyIndex()].vmName,'-nic'))]"
+            }
+          ]
+        },
+        "diagnosticsProfile": {
+          "bootDiagnostics": {
+            "enabled": "true",
+            "storageUri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts/', parameters('vmSetup').diagnosticStorageAccount), '2016-01-01').primaryEndpoints.blob)]"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "2016-04-30-preview",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(parameters('vmSetup').vmList[copyIndex()].vmName,'/joindomain')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/virtualMachines',parameters('vmSetup').vmList[copyIndex()].vmName)]"
+      ],
+      "copy": {
+        "name": "domainJoinLoop",
+        "count": "[length(parameters('vmSetup').vmList)]"
+      },
+      "properties": {
+        "publisher": "Microsoft.Compute",
+        "type": "JsonADDomainExtension",
+        "typeHandlerVersion": "1.3",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "Name": "[parameters('domainName')]",
+          "Options": "3",
+          "OUPath": "[parameters('ouPath')]",
+          "Restart": "true",
+          "User": "[concat('internal','\\',parameters('domainAdminUsername'))]"
+        },
+        "protectedsettings": {
+          "Password": "[parameters('domainAdminPassword')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(parameters('vmSetup').vmList[copyIndex()].vmName,'/scriptconfig')]",
+      "apiVersion": "2016-04-30-preview",
+      "location": "[resourceGroup().location]",
+      "copy": {
+        "name": "configAdminsLoop",
+        "count": "[length(parameters('vmSetup').vmList)]"
+      },
+      "dependsOn": [
+        "[concat('Microsoft.Compute/virtualMachines/', parameters('vmSetup').vmList[copyIndex()].vmName,'/extensions','/joindomain')]"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Compute",
+        "type": "CustomScriptExtension",
+        "typeHandlerVersion": "1.8",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "fileUris": [
+
+          ],
+          "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted net localgroup administrators ',variables('addUsers'),' /add')]"
+        }
+      }
+    }
+
+  ],
+  "outputs": {}
+}

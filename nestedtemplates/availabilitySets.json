@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "spAvailabilitySetNames": {
+      "type": "object"
+    },
+    "generalParameters": {
+      "type": "object"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Compute/availabilitySets",
+      "name": "[parameters('spAvailabilitySetNames').name[copyIndex()]]",
+      "apiVersion": "2017-03-30",
+      "sku": {
+        "name" : "Aligned"
+      },
+      "location": "[parameters('generalParameters').location]",
+      "tags": "[parameters('generalParameters').tags]",
+      "copy": {
+        "name": "availabilitySetLoop",
+        "count": "[int(length(parameters('spAvailabilitySetNames').name))]"
+      },
+      "properties": {
+        "platformUpdateDomainCount": 5,
+        "platformFaultDomainCount": 2
+      }
+    }
+  ],
+  "outputs": {  }
+}
